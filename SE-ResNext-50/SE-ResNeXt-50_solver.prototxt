@@ -1,0 +1,19 @@
+net: "/furniture/SE-ResNext-50/seResnext50/SE-ResNeXt-50.prototxt"
+
+test_iter: 79
+test_interval: 2000
+average_loss: 20
+lr_policy: "multistep"
+base_lr: 0.01
+gamma: 0.1
+stepvalue: 54000
+stepvalue: 108000
+stepvalue: 162000
+max_iter:  200000
+display: 20
+momentum: 0.9
+weight_decay: 0.0005
+snapshot: 2000
+snapshot_prefix: "/furniture/SE-ResNext-50/seResnext50/model2/SE-ResNeXt-50"
+solver_mode: GPU
+strategy: STRATEGY_0

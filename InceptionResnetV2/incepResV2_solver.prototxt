@@ -1,0 +1,19 @@
+net: "/furniture/incepResNetV2/incepResV2/inceptionResNetV2.prototxt"
+
+test_iter: 79
+test_interval: 2000
+average_loss: 20
+lr_policy: "multistep"
+base_lr: 0.01
+gamma: 0.1
+stepvalue: 80000
+stepvalue: 160000
+stepvalue: 240000
+max_iter:  300000
+display: 20
+momentum: 0.9
+weight_decay: 0.0005
+snapshot: 2000
+snapshot_prefix: "/furniture/incepResNetV2/incepResV2/model1/incepResV2"
+solver_mode: GPU
+strategy: STRATEGY_0
