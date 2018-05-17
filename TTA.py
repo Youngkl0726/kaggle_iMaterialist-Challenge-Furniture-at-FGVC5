@@ -1,18 +1,23 @@
 import numpy as np
 import csv
 
+# average
+npy = []
+a = 1.0
+b = 1.0
+c = 0.9
+for i in xrange(2):
+    npy_name = 'prob_dense{:0}.npy'.format(i)
+    npy.append(np.load(npy_name))
+# print npy[0][0], npy[1][0], npy[2][0]
+npy_add = a*npy[0] + b*npy[1] # 0.981
+# print npy_add[0]
 txt_file = open('result.txt', 'wb')
-npy_name = 'prob_dense0.npy'
-print npy_name
-npy = np.load(npy_name)
-# print npy[0],npy[1]
-# print np.where(npy[0] == np.max(npy[0]))[0][0]
-len = npy.shape[0]
-print len
-for j in xrange(len):
-    res = int(np.where(npy[j] == np.max(npy[j]))[0][0])
+for i in xrange(12704):
+    res = int(np.where(npy_add[i] == np.max(npy_add[i]))[0][0])
     txt_file.write(str(res)+'\n')
 txt_file.close()
+
 
 def get_name(filename):
     file = open(filename)
@@ -109,3 +114,5 @@ for i in xrange(12800):
         context.append("2")
     writer.writerow(context)
 csvfile.close()
+
+
