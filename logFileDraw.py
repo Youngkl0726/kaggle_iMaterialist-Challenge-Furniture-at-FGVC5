@@ -1,25 +1,23 @@
 
 # coding: utf-8
 
-# In[1]:
+# In[2]:
 
 
 import re
 import os
-# import tensorflow as tf
 import matplotlib.pyplot as plt
-# from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 
 
-# In[16]:
+# In[3]:
 
 
 log_path = "./log/log6.txt"
-soft = False
+soft = True
 ep = 77
 
 
-# In[20]:
+# In[4]:
 
 
 val_prec1=[]
@@ -41,17 +39,17 @@ with open(log_path, 'r') as fp:
         if m2:
             if soft and (Iter2 % ep == 0) and (Iter2 != 0):
                 train_loss.append(train_loss[Iter2-1])
-                train_prec1.append(train_prec1[Iter2-1])                
+                train_prec1.append(train_prec1[Iter2-1])
                 Iter2 += 1
             else:
                 s1 = float(m2.group(2).replace(',', ''))
                 s2 = float(m2.group(4).replace(',', ''))
                 train_loss.append(s1)
-                train_prec1.append(s2)                
+                train_prec1.append(s2)
                 Iter2 += 1
 
 
-# In[21]:
+# In[5]:
 
 
 plt.figure(figsize=(15, 30))
@@ -72,7 +70,7 @@ plt.legend()
 plt.grid(True)
 
 plt.subplot(413)
-plt.plot(range(len(val_loss)), val_loss, label='val_prec1')
+plt.plot(range(len(val_prec1)), val_prec1, label='val_prec1')
 plt.title('Val_prec1 over '+ str(len(val_prec1)) +' Epochs', size=15)
 plt.xlabel("Epochs")
 plt.ylabel("val_prec1")
