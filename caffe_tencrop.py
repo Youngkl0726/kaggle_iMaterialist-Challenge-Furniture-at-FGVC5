@@ -5,8 +5,8 @@ Classifier is an image classifier specialization of Net.
 
 import numpy as np
 import sys
-caffe_root = '/mnt/lustre/yangkunlin/sensenet_disp/'
-myself='/mnt/lustre/yangkunlin/furniture/incepResNetV2/incepResV2/'
+caffe_root = '/yangkunlin/sensenet_disp/'
+myself='/yangkunlin/furniture/incepResNetV2/incepResV2/'
 sys.path.insert(0, caffe_root + 'core/python')
 import caffe
 caffe.mpi_init()
@@ -148,8 +148,8 @@ def doClassify(model_def, model_weights, test_dir, test_txt):
 
 model_def = myself+'inceptionResNetV2_multi.prototxt'
 model_weights = myself+'model7/incepResV2_iter_20000.caffemodel'
-test_dir = '/mnt/lustre/yangkunlin/furniture/data/test/'
-test_txt = '/mnt/lustre/yangkunlin/furniture/data/test0.txt'
+test_dir = '/yangkunlin/furniture/data/test/'
+test_txt = '/yangkunlin/furniture/data/test0.txt'
 
 doClassify(model_def, model_weights, test_dir, test_txt)
 
