@@ -14,6 +14,26 @@ for j in xrange(len):
     txt_file.write(str(res)+'\n')
 txt_file.close()
 
+#
+# txt_file = open('result.txt', 'wb')
+# npy_name = 'prob_test_1.npy'
+# print npy_name
+# npy = np.load(npy_name)
+# len = npy.shape[0]
+# print len
+# for j in xrange(len):
+#     res = int(np.where(npy[j] == np.max(npy[j]))[0][0])
+#     txt_file.write(str(res)+'\n')
+# npy_name2 = 'prob_test_2.npy'
+# print npy_name2
+# npy2 = np.load(npy_name2)
+# len2 = npy2.shape[0]
+# print len2
+# for j in xrange(len2):
+#     res = int(np.where(npy2[j] == np.max(npy2[j]))[0][0])
+#     txt_file.write(str(res)+'\n')
+# txt_file.close()
+
 def get_name(filename):
     file = open(filename)
     res_line = []
