@@ -7,12 +7,12 @@ a = 1.0
 b = 1.0
 c = 1.0
 print a,b,c
-for i in xrange(1,3):
+for i in xrange(0,3):
     print("i is: {}".format(i))
-    npy_name = 'prob_dense0_{:0}.npy'.format(i)
+    npy_name = './rst/prob_{:0}.npy'.format(i)
     npy.append(np.load(npy_name))
 # print npy[0][0], npy[1][0], npy[2][0]
-npy_add = a*npy[0] + b*npy[1]
+npy_add = a*npy[0] + b*npy[1] + c*npy[2]
 # print npy_add[0]
 txt_file = open('result.txt', 'wb')
 for i in xrange(12704):
