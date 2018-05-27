@@ -3,18 +3,21 @@ import csv
 
 model_list = ['res152_ck5.npy', 'inceptionResnetv2_ck1.npy', 'dpn98_ck1.npy', \
               'senet154_ck2.npy', 'dpn131_ck1.npy', 'inceptionResnetv2_ck2.npy', \
-              'res152_ck7.npy', 'nasnet_ck1.npy', 'dpn98_ck2.npy']
+              'res152_ck7.npy', 'nasnet_ck1.npy', 'dpn98_ck2.npy', \
+              'inceptionv4_ck1.npy', 'dpn92_ck1.npy', 'resnet152_ck8.npy']
 
+length = len(model_list)
 # average
 npy = []
-for i in xrange(0,9):
+for i in xrange(0, length):
     model_name = model_list[i]
     print("model name is: {}".format(model_name))
     npy_file = '/Users/youngkl/Desktop/fur_res/'+model_name
     npy.append(np.load(npy_file))
 # print npy[0][0], npy[1][0], npy[2][0]
 npy_res = npy[0]
-for i in xrange(1,9):
+for i in xrange(1, length):
+    print i
     npy_res = npy_res + npy[i]
 # print npy_add[0]
 txt_file = open('result.txt', 'wb')
@@ -82,4 +85,17 @@ for i in xrange(12800):
     writer.writerow(context)
 csvfile.close()
 
-
+# ensemble1
+# model_list = ['res152_ck5.npy', 'inceptionResnetv2_ck1.npy', 'dpn98_ck1.npy', \
+#               'senet154_ck2.npy', 'dpn131_ck1.npy', 'inceptionResnetv2_ck2.npy', \
+#               'res152_ck7.npy', 'nasnet_ck1.npy', 'dpn98_ck2.npy']
+# ensemble2
+# model_list = ['res152_ck5.npy', 'inceptionResnetv2_ck1.npy', 'dpn98_ck1.npy', \
+#               'senet154_ck2.npy', 'dpn131_ck1.npy', 'inceptionResnetv2_ck2.npy', \
+#               'res152_ck7.npy', 'nasnet_ck1.npy', 'dpn98_ck2.npy', \
+#               'inceptionv4_ck1.npy', 'dpn92_ck1.npy']
+# ensemble3
+# model_list = ['res152_ck5.npy', 'inceptionResnetv2_ck1.npy', 'dpn98_ck1.npy', \
+#               'senet154_ck2.npy', 'dpn131_ck1.npy', 'inceptionResnetv2_ck2.npy', \
+#               'res152_ck7.npy', 'nasnet_ck1.npy', 'dpn98_ck2.npy', \
+#               'inceptionv4_ck1.npy', 'dpn92_ck1.npy', 'resnet152_ck8.npy']
