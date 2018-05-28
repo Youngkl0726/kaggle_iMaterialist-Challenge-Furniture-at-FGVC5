@@ -18,86 +18,48 @@ import os.path as osp
 import torch.nn.functional as F
 import numpy as np
 from augmentation import HorizontalFlip
+from functools import partial
+import senet
 
 from memcached_dataset import McDataset
 from distributed_utils import dist_init, average_gradients, DistModule
 
 from base_tester import BaseTester, TenCropTester
 
-class FineTuneModel(nn.Module):
-    def __init__(self, original_model, arch, num_classes):
-        super(FineTuneModel, self).__init__()
 
-        if arch.startswith('alexnet') :
-            self.features = original_model.features
-            self.classifier = nn.Sequential(
-                nn.Dropout(),
-                nn.Linear(256 * 6 * 6, 4096),
-                nn.ReLU(inplace=True),
-                nn.Dropout(),
-                nn.Linear(4096, 4096),
-                nn.ReLU(inplace=True),
-                nn.Linear(4096, num_classes),
-            )
-            self.modelName = 'alexnet'
-        elif arch.startswith('resnet') :
-            # Everything except the last linear layer
-            self.features = nn.Sequential(*list(original_model.children())[:-1])
-            self.classifier = nn.Sequential(
-                nn.Linear(original_model.fc.in_features, num_classes)
-            )
-            self.modelName = 'resnet'
-        elif arch.startswith('vgg16'):
-            self.features = original_model.features
-            self.classifier = nn.Sequential(
-                nn.Dropout(),
-                nn.Linear(25088, 4096),
-                nn.ReLU(inplace=True),
-                nn.Dropout(),
-                nn.Linear(4096, 4096),
-                nn.ReLU(inplace=True),
-                nn.Linear(4096, num_classes),
-            )
-            self.modelName = 'vgg16'
-        elif arch.startswith('dense'):
-            self.features = nn.Sequential(*list(original_model.children())[:-1])
-
-            # Get number of features of last layer
-            num_feats = original_model.classifier.in_features
-
-            # Plug our classifier
-            self.classifier = nn.Sequential(
-                nn.Linear(num_feats, num_classes)
-            )
-            self.modelName = 'densenet'
-        else :
-            raise("Finetuning not supported on this architecture yet")
-
-        # Freeze those weights
-        for p in self.features.parameters():
-            p.requires_grad = False
+NB_CLASSES = 128
+class FinetunePretrainedModels(nn.Module):
+    def __init__(self, num_classes, net_cls, net_kwards):
+        super().__init__()
+        self.net = net_cls(**net_kwards)
+        self.net.last_linear = nn.Linear(
+            self.net.last_linear.in_features, num_classes)
 
     def forward(self, x):
-        f = self.features(x)
-        if self.modelName == 'alexnet':
-            f = f.view(f.size(0), 256 * 6 * 6)
-        elif self.modelName == 'vgg16':
-            f = f.view(f.size(0), -1)
-        elif self.modelName == 'resnet':
-            f = f.view(f.size(0), -1)
-        elif self.modelName == 'densenet':
-            f = F.relu(f, inplace=True)
-            f = F.avg_pool2d(f, kernel_size=7).view(f.size(0), -1)
-        y = self.classifier(f)
-        return y
+        return self.net(x)
+
+model_dict = {
+    'senet154': partial(FinetunePretrainedModels, NB_CLASSES, senet.senet154)
+}
+
+net_kwards = [{'pretrained': 'imagenet'}, {'pretrained': None}]
+
+def get_model(model_name: str, pretrained=False):
+    # print('[+] getting model architecture... ')
+    if(pretrained):
+        model = model_dict[model_name](net_kwards[0])
+    else:
+        model = model_dict[model_name](net_kwards[1])
+    print('[+] done.')
+    return model
 
 test_root = "/mnt/lustre/yangkunlin/furniture/data/test/"
 test_source = "/mnt/lustre/yangkunlin/furniture/data/test0.txt"
 image_size = 256
 input_size = 224
-batch_size = 10
-arch = "densenet161"
-ckp_path = "/mnt/lustre/yangkunlin/furniture/pytorch/dense161/checkpoint5_best.pth.tar"
+batch_size = 16
+arch = "senet154"
+ckp_path = "/mnt/lustre/yangkunlin/furniture/pytorch/senet154/checkpoint2_best.pth.tar"
 
 def load_checkpoint(fpath):
     if osp.isfile(fpath):
@@ -141,12 +103,13 @@ preprocess_tencrop = transforms.Compose([
 
 def main():
 
-    # tta_preprocess = [preprocess, preprocess_hflip]
-    tta_preprocess = [preprocess_tencrop]
+    TTA2_preprocess = [preprocess, preprocess_hflip]
+    TTA10_preprocess = [preprocess_tencrop]
+    TTA12_preprocess = [preprocess, preprocess_hflip, preprocess_tencrop]
     id = 0
     print("testing {}.....".format(ckp_path))
 
-    for trans in tta_preprocess:
+    for trans in TTA10_preprocess:
         print("id is: {}".format(id))
         test_dataset = McDataset(
             test_root,
@@ -155,14 +118,17 @@ def main():
 
         test_loader = DataLoader(test_dataset, batch_size, shuffle=False, pin_memory=False)
         print("test loading....")
-        model = models.__dict__[arch]()
-        model = FineTuneModel(model, arch, 128)
+        model = get_model('senet154', pretrained=False)
         # model.cuda()
         model = torch.nn.DataParallel(model).cuda()
         checkpoint = load_checkpoint(ckp_path)
         model.load_state_dict(checkpoint['state_dict'])
-        # tester = BaseTester(model)
         tester = TenCropTester(model)
+        # if id == 2:
+        #     tester = TenCropTester(model)
+        # else:
+        #     tester = BaseTester(model)
+
         pred = tester.extract(test_loader)
         np.save("./rst/prob_dense{}.npy".format(id), pred)
         id += 1

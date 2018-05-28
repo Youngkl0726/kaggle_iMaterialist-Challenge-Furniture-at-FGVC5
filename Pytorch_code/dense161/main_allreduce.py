@@ -14,21 +14,15 @@ import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 import torchvision.models as models
 import torch.nn.functional as F
+import densenet
+from functools import partial
 
 import os.path as osp
 from memcached_dataset import McDataset
 from distributed_utils import dist_init, average_gradients, DistModule
 
-model_names = sorted(name for name in models.__dict__
-    if name.islower() and not name.startswith("__")
-    and callable(models.__dict__[name]))
-
 parser = argparse.ArgumentParser(description='PyTorch ImageNet Training')
-parser.add_argument('--arch', '-a', metavar='ARCH', default='resnet50',
-                    choices=model_names,
-                    help='model architecture: ' +
-                        ' | '.join(model_names) +
-                        ' (default: resnet50)')
+
 parser.add_argument('-j', '--workers', default=16, type=int)
 parser.add_argument('--epochs', default=20, type=int)
 parser.add_argument('--start-epoch', default=0, type=int)
@@ -42,17 +36,18 @@ parser.add_argument('--print-freq', '-p', default=10, type=int)
 parser.add_argument('--load-path', default='', type=str)
 parser.add_argument('--resume-opt', action='store_true')
 parser.add_argument('-e', '--evaluate', action='store_true')
-parser.add_argument('--port', default='23156', type=str)
+parser.add_argument('--port', default='29046', type=str)
 # parser.add_argument('--train-root', default='/mnt/lustre/yangkunlin/furniture/data/train_all/train_v1/', type=str)
 # parser.add_argument('--train-source', default='/mnt/lustre/yangkunlin/furniture/data/train_all_list.txt', type=str)
-parser.add_argument('--train-root', default='/mnt/lustre17/yangkunlin/furniture/data/', type=str)
-parser.add_argument('--train-source', default='/mnt/lustre17/yangkunlin/furniture/data/train.txt', type=str)
-parser.add_argument('--val-root', default='/mnt/lustre17/yangkunlin/furniture/data/val/', type=str)
-parser.add_argument('--val-source', default='/mnt/lustre17/yangkunlin/furniture/data/valid.txt', type=str)
-parser.add_argument('--save-path', default='checkpoint4', type=str)
+parser.add_argument('--train-root', default='/mnt/lustre/yangkunlin/furniture/data/', type=str)
+parser.add_argument('--train-source', default='/mnt/lustre/yangkunlin/furniture/data/train.txt', type=str)
+parser.add_argument('--val-root', default='/mnt/lustre/yangkunlin/furniture/data/val/', type=str)
+parser.add_argument('--val-source', default='/mnt/lustre/yangkunlin/furniture/data/valid.txt', type=str)
+parser.add_argument('--save-path', default='checkpoint6', type=str)
 
 best_prec1 = 0
 min_loss = float("inf")
+NB_CLASSES = 128
 
 class ColorAugmentation(object):
     def __init__(self, eig_vec=None, eig_val=None):
@@ -75,76 +70,32 @@ class ColorAugmentation(object):
         return tensor
 
 
-class FineTuneModel(nn.Module):
-    def __init__(self, original_model, arch, num_classes):
-        super(FineTuneModel, self).__init__()
-
-        if arch.startswith('alexnet'):
-            self.features = original_model.features
-            self.classifier = nn.Sequential(
-                nn.Dropout(),
-                nn.Linear(256 * 6 * 6, 4096),
-                nn.ReLU(inplace=True),
-                nn.Dropout(),
-                nn.Linear(4096, 4096),
-                nn.ReLU(inplace=True),
-                nn.Linear(4096, num_classes),
-            )
-            self.modelName = 'alexnet'
-        elif arch.startswith('resnet'):
-            # Everything except the last linear layer
-            self.features = nn.Sequential(*list(original_model.children())[:-1])
-            self.classifier = nn.Sequential(
-                nn.Linear(original_model.fc.in_features, num_classes)
-            )
-            self.modelName = 'resnet'
-        elif arch.startswith('vgg16'):
-            self.features = original_model.features
-            self.classifier = nn.Sequential(
-                nn.Dropout(),
-                nn.Linear(25088, 4096),
-                nn.ReLU(inplace=True),
-                nn.Dropout(),
-                nn.Linear(4096, 4096),
-                nn.ReLU(inplace=True),
-                nn.Linear(4096, num_classes),
-            )
-            self.modelName = 'vgg16'
-        elif arch.startswith('dense'):
-            self.features = nn.Sequential(*list(original_model.children())[:-1])
-
-            # Get number of features of last layer
-            num_feats = original_model.classifier.in_features
-
-            # Plug our classifier
-            self.classifier = nn.Sequential(
-                nn.Linear(num_feats, num_classes)
-            )
-            self.modelName = 'densenet'
-        else:
-            raise ("Finetuning not supported on this architecture yet")
-
-        for m in self.classifier:
-            nn.init.kaiming_normal(m.weight)
-
-        # Freeze those weights
-        # for p in self.features.parameters():
-        #     p.requires_grad = False
+class FinetunePretrainedModels(nn.Module):
+    def __init__(self, num_classes, net_cls, net_kwards):
+        super().__init__()
+        self.net = net_cls(**net_kwards)
+        self.net.classifier = nn.Linear(
+            self.net.classifier.in_features, num_classes)
 
     def forward(self, x):
-        f = self.features(x)
-        if self.modelName == 'alexnet':
-            f = f.view(f.size(0), 256 * 6 * 6)
-        elif self.modelName == 'vgg16':
-            f = f.view(f.size(0), -1)
-        elif self.modelName == 'resnet':
-            f = f.view(f.size(0), -1)
-        elif self.modelName == 'densenet':
-            f = F.relu(f, inplace=True)
-            f = F.avg_pool2d(f, kernel_size=7).view(f.size(0), -1)
-        y = self.classifier(f)
-        return y
+        return self.net(x)
+model_dict = {
+    'dense161': partial(FinetunePretrainedModels, NB_CLASSES, densenet.densenet161)
+}
 
+net_kwards = [{'pretrained': 'True'}, {'pretrained': None}]
+
+def get_model(model_name: str, pretrained=True):
+    # print('[+] getting model architecture... ')
+    if(pretrained):
+        model = model_dict[model_name](net_kwards[0])
+    else:
+        model = model_dict[model_name](net_kwards[1])
+    print('[+] done.')
+    return model
+
+last_layer_names = ['module.net.last_linear.weight', 'module.net.last_linear.bias',
+                    'module.net.classifier.weight', 'module.net.classifier.bias']
 
 def main():
     global args, best_prec1, min_loss
@@ -157,18 +108,11 @@ def main():
     args.workers = args.workers // world_size
 
     # create model
-    print("=> creating model '{}'".format(args.arch))
-    print("save_path is: {}",format(args.save_path))
-    if args.arch.startswith('inception_v3'):
-        print('inception_v3 without aux_logits!')
-        image_size = 341
-        input_size = 299
-        model = models.__dict__[args.arch](pretrained=True)
-    else:
-        image_size = 256
-        input_size = 224
-        model = models.__dict__[args.arch](pretrained=True)
-    model = FineTuneModel(model, args.arch, 128)
+    print("=> creating model '{}'".format("dense161"))
+    print("save_path is: {}".format(args.save_path))
+    image_size = 256
+    input_size = 224
+    model = get_model('dense161', pretrained=True)
     # print("model is: {}".format(model))
     model.cuda()
     model = DistModule(model)
@@ -245,7 +189,7 @@ def main():
             lr = 0.001
             for name, param in model.named_parameters():
                 # print("name is: {}".format(name))
-                if (name != 'module.classifier.0.weight' and name != 'module.classifier.0.bias'):
+                if (name not in last_layer_names):
                     param.requires_grad = False
             optimizer = torch.optim.Adam(
                 filter(lambda p: p.requires_grad, model.parameters()), lr=lr)
@@ -268,7 +212,7 @@ def main():
                 is_best = True
                 save_checkpoint({
                     'epoch': epoch + 1,
-                    'arch': args.arch,
+                    'arch': 'dense161',
                     'state_dict': model.state_dict(),
                     'best_prec1': best_prec1,
                     'optimizer': optimizer.state_dict(),
@@ -287,6 +231,7 @@ def main():
             else:
                 patience += 1
         print("patience is: {}".format(patience))
+        print("min_loss is: {}".format(min_loss))
     print("min_loss is: {}".format(min_loss))
 
 
@@ -449,10 +394,8 @@ def accuracy(output, target, topk=(1,)):
     return res[0]
 
 def load_checkpoint(fpath):
-    def map_func(storage, location):
-        return storage.cuda()
     if osp.isfile(fpath):
-        checkpoint = torch.load(fpath, map_location=map_func)
+        checkpoint = torch.load(fpath)
         print("=> Loaded checkpoint '{}'".format(fpath))
         return checkpoint
     else:

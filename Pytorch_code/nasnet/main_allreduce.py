@@ -14,7 +14,7 @@ import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 import torchvision.models as models
 import torch.nn.functional as F
-import densenet
+import nasnet
 from functools import partial
 
 import os.path as osp
@@ -36,14 +36,14 @@ parser.add_argument('--print-freq', '-p', default=10, type=int)
 parser.add_argument('--load-path', default='', type=str)
 parser.add_argument('--resume-opt', action='store_true')
 parser.add_argument('-e', '--evaluate', action='store_true')
-parser.add_argument('--port', default='23446', type=str)
+parser.add_argument('--port', default='23666', type=str)
 # parser.add_argument('--train-root', default='/mnt/lustre/yangkunlin/furniture/data/train_all/train_v1/', type=str)
 # parser.add_argument('--train-source', default='/mnt/lustre/yangkunlin/furniture/data/train_all_list.txt', type=str)
 parser.add_argument('--train-root', default='/mnt/lustre/yangkunlin/furniture/data/', type=str)
 parser.add_argument('--train-source', default='/mnt/lustre/yangkunlin/furniture/data/train.txt', type=str)
 parser.add_argument('--val-root', default='/mnt/lustre/yangkunlin/furniture/data/val/', type=str)
 parser.add_argument('--val-source', default='/mnt/lustre/yangkunlin/furniture/data/valid.txt', type=str)
-parser.add_argument('--save-path', default='checkpoint7', type=str)
+parser.add_argument('--save-path', default='checkpoint2', type=str)
 
 best_prec1 = 0
 min_loss = float("inf")
@@ -69,21 +69,20 @@ class ColorAugmentation(object):
         tensor = tensor + quatity.view(3, 1, 1)
         return tensor
 
-
 class FinetunePretrainedModels(nn.Module):
     def __init__(self, num_classes, net_cls, net_kwards):
         super().__init__()
         self.net = net_cls(**net_kwards)
-        self.net.classifier = nn.Linear(
-            self.net.classifier.in_features, num_classes)
+        self.net.last_linear = nn.Linear(
+            self.net.last_linear.in_features, num_classes)
 
     def forward(self, x):
         return self.net(x)
 model_dict = {
-    'dense169': partial(FinetunePretrainedModels, NB_CLASSES, densenet.densenet169)
+    'nasnetalarge': partial(FinetunePretrainedModels, NB_CLASSES, nasnet.nasnetalarge)
 }
 
-net_kwards = [{'pretrained': 'True'}, {'pretrained': None}]
+net_kwards = [{'pretrained': 'imagenet+background'}, {'pretrained': None}]
 
 def get_model(model_name: str, pretrained=True):
     # print('[+] getting model architecture... ')
@@ -102,17 +101,19 @@ def main():
     args = parser.parse_args()
 
     rank, world_size = dist_init(args.port)
+    print("world_size is: {}".format(world_size))
     assert (args.batch_size % world_size == 0)
     assert (args.workers % world_size == 0)
     args.batch_size = args.batch_size // world_size
     args.workers = args.workers // world_size
 
     # create model
-    print("=> creating model '{}'".format("dense169"))
+    print("=> creating model '{}'".format("nasnetalarge"))
     print("save_path is: {}".format(args.save_path))
-    image_size = 256
-    input_size = 224
-    model = get_model('dense169', pretrained=True)
+
+    image_size = 378
+    input_size = 331
+    model = get_model('nasnetalarge', pretrained=True)
     # print("model is: {}".format(model))
     model.cuda()
     model = DistModule(model)
@@ -128,8 +129,8 @@ def main():
     cudnn.benchmark = True
 
     # Data loading code
-    normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                     std=[0.229, 0.224, 0.225])
+    normalize = transforms.Normalize(mean=[0.5, 0.5, 0.5],
+                                     std=[0.5, 0.5, 0.5])
 
     train_dataset = McDataset(
         args.train_root,
@@ -148,8 +149,6 @@ def main():
         transforms.Compose([
             transforms.Resize(image_size),
             transforms.CenterCrop(input_size),
-            # transforms.Resize(input_size),
-            # transforms.CenterCrop(input_size),
             transforms.ToTensor(),
             normalize,
         ]))
@@ -177,12 +176,11 @@ def main():
         if epoch == 1:
             lr = 0.00003
         if patience == 2:
-        # if epoch == 1:
+        # if epoch == 2:
             patience = 0
             checkpoint = load_checkpoint(args.save_path+'_best.pth.tar')
             model.load_state_dict(checkpoint['state_dict'])
             print("Loading checkpoint_best.............")
-            # model.load_state_dict(torch.load('checkpoint_best.pth.tar'))
             lr = lr / 10.0
 
         if epoch == 0:
@@ -212,7 +210,7 @@ def main():
                 is_best = True
                 save_checkpoint({
                     'epoch': epoch + 1,
-                    'arch': 'dense169',
+                    'arch': 'nasnetalarge',
                     'state_dict': model.state_dict(),
                     'best_prec1': best_prec1,
                     'optimizer': optimizer.state_dict(),
@@ -231,7 +229,6 @@ def main():
             else:
                 patience += 1
         print("patience is: {}".format(patience))
-        print("min_loss is: {}".format(min_loss))
     print("min_loss is: {}".format(min_loss))
 
 
@@ -394,8 +391,10 @@ def accuracy(output, target, topk=(1,)):
     return res[0]
 
 def load_checkpoint(fpath):
+    def map_func(storage, location):
+        return storage.cuda()
     if osp.isfile(fpath):
-        checkpoint = torch.load(fpath)
+        checkpoint = torch.load(fpath, map_location=map_func)
         print("=> Loaded checkpoint '{}'".format(fpath))
         return checkpoint
     else:

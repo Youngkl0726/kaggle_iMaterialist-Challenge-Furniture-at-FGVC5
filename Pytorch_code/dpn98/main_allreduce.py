@@ -14,15 +14,23 @@ import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 import torchvision.models as models
 import torch.nn.functional as F
-import densenet
+import dpn
 from functools import partial
 
 import os.path as osp
 from memcached_dataset import McDataset
 from distributed_utils import dist_init, average_gradients, DistModule
 
-parser = argparse.ArgumentParser(description='PyTorch ImageNet Training')
+# model_names = sorted(name for name in models.__dict__
+#     if name.islower() and not name.startswith("__")
+#     and callable(models.__dict__[name]))
 
+parser = argparse.ArgumentParser(description='PyTorch ImageNet Training')
+# parser.add_argument('--arch', '-a', metavar='ARCH', default='resnet50',
+#                     choices=model_names,
+#                     help='model architecture: ' +
+#                         ' | '.join(model_names) +
+#                         ' (default: resnet50)')
 parser.add_argument('-j', '--workers', default=16, type=int)
 parser.add_argument('--epochs', default=20, type=int)
 parser.add_argument('--start-epoch', default=0, type=int)
@@ -36,14 +44,14 @@ parser.add_argument('--print-freq', '-p', default=10, type=int)
 parser.add_argument('--load-path', default='', type=str)
 parser.add_argument('--resume-opt', action='store_true')
 parser.add_argument('-e', '--evaluate', action='store_true')
-parser.add_argument('--port', default='23446', type=str)
+parser.add_argument('--port', default='23876', type=str)
 # parser.add_argument('--train-root', default='/mnt/lustre/yangkunlin/furniture/data/train_all/train_v1/', type=str)
 # parser.add_argument('--train-source', default='/mnt/lustre/yangkunlin/furniture/data/train_all_list.txt', type=str)
 parser.add_argument('--train-root', default='/mnt/lustre/yangkunlin/furniture/data/', type=str)
-parser.add_argument('--train-source', default='/mnt/lustre/yangkunlin/furniture/data/train.txt', type=str)
+parser.add_argument('--train-source', default='/mnt/lustre/yangkunlin/furniture/data/Pseudo-Label.txt', type=str)
 parser.add_argument('--val-root', default='/mnt/lustre/yangkunlin/furniture/data/val/', type=str)
 parser.add_argument('--val-source', default='/mnt/lustre/yangkunlin/furniture/data/valid.txt', type=str)
-parser.add_argument('--save-path', default='checkpoint7', type=str)
+parser.add_argument('--save-path', default='checkpoint3', type=str)
 
 best_prec1 = 0
 min_loss = float("inf")
@@ -74,16 +82,16 @@ class FinetunePretrainedModels(nn.Module):
     def __init__(self, num_classes, net_cls, net_kwards):
         super().__init__()
         self.net = net_cls(**net_kwards)
-        self.net.classifier = nn.Linear(
-            self.net.classifier.in_features, num_classes)
+        self.net.classifier = nn.Conv2d(
+            self.net.classifier.in_channels, num_classes, kernel_size=1, bias=True)
 
     def forward(self, x):
         return self.net(x)
 model_dict = {
-    'dense169': partial(FinetunePretrainedModels, NB_CLASSES, densenet.densenet169)
+    'dpn98': partial(FinetunePretrainedModels, NB_CLASSES, dpn.dpn98)
 }
 
-net_kwards = [{'pretrained': 'True'}, {'pretrained': None}]
+net_kwards = [{'pretrained': 'imagenet'}, {'pretrained': None}]
 
 def get_model(model_name: str, pretrained=True):
     # print('[+] getting model architecture... ')
@@ -97,22 +105,26 @@ def get_model(model_name: str, pretrained=True):
 last_layer_names = ['module.net.last_linear.weight', 'module.net.last_linear.bias',
                     'module.net.classifier.weight', 'module.net.classifier.bias']
 
+
 def main():
     global args, best_prec1, min_loss
     args = parser.parse_args()
 
     rank, world_size = dist_init(args.port)
+    print("world_size is: {}".format(world_size))
     assert (args.batch_size % world_size == 0)
     assert (args.workers % world_size == 0)
     args.batch_size = args.batch_size // world_size
     args.workers = args.workers // world_size
 
     # create model
-    print("=> creating model '{}'".format("dense169"))
+    print("=> creating model '{}'".format("dpn98"))
     print("save_path is: {}".format(args.save_path))
+
     image_size = 256
     input_size = 224
-    model = get_model('dense169', pretrained=True)
+    model = get_model('dpn98', pretrained=True)
+    # model = FineTuneModel(model, args.arch, 128)
     # print("model is: {}".format(model))
     model.cuda()
     model = DistModule(model)
@@ -128,8 +140,8 @@ def main():
     cudnn.benchmark = True
 
     # Data loading code
-    normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                     std=[0.229, 0.224, 0.225])
+    normalize = transforms.Normalize(mean=[124.0 / 255.0, 117.0 / 255.0, 104.0 / 255.0],
+                                     std=[1.0 / (.0167 * 255)] * 3)
 
     train_dataset = McDataset(
         args.train_root,
@@ -212,7 +224,7 @@ def main():
                 is_best = True
                 save_checkpoint({
                     'epoch': epoch + 1,
-                    'arch': 'dense169',
+                    'arch': "dpn98",
                     'state_dict': model.state_dict(),
                     'best_prec1': best_prec1,
                     'optimizer': optimizer.state_dict(),
@@ -230,8 +242,8 @@ def main():
                 patience = 0
             else:
                 patience += 1
-        print("patience is: {}".format(patience))
         print("min_loss is: {}".format(min_loss))
+        print("patience is: {}".format(patience))
     print("min_loss is: {}".format(min_loss))
 
 
@@ -394,8 +406,10 @@ def accuracy(output, target, topk=(1,)):
     return res[0]
 
 def load_checkpoint(fpath):
+    def map_func(storage, location):
+        return storage.cuda()
     if osp.isfile(fpath):
-        checkpoint = torch.load(fpath)
+        checkpoint = torch.load(fpath, map_location=map_func)
         print("=> Loaded checkpoint '{}'".format(fpath))
         return checkpoint
     else:

@@ -14,17 +14,22 @@ import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 import torchvision.models as models
 import torch.nn.functional as F
-import densenet
-from functools import partial
 
-import os.path as osp
 from memcached_dataset import McDataset
 from distributed_utils import dist_init, average_gradients, DistModule
 
-parser = argparse.ArgumentParser(description='PyTorch ImageNet Training')
+model_names = sorted(name for name in models.__dict__
+    if name.islower() and not name.startswith("__")
+    and callable(models.__dict__[name]))
 
+parser = argparse.ArgumentParser(description='PyTorch ImageNet Training')
+parser.add_argument('--arch', '-a', metavar='ARCH', default='resnet50',
+                    choices=model_names,
+                    help='model architecture: ' +
+                        ' | '.join(model_names) +
+                        ' (default: resnet50)')
 parser.add_argument('-j', '--workers', default=16, type=int)
-parser.add_argument('--epochs', default=20, type=int)
+parser.add_argument('--epochs', default=50, type=int)
 parser.add_argument('--start-epoch', default=0, type=int)
 parser.add_argument('-b', '--batch-size', default=256, type=int)
 parser.add_argument('--lr', '--learning-rate', default=0.01, type=float)
@@ -36,18 +41,14 @@ parser.add_argument('--print-freq', '-p', default=10, type=int)
 parser.add_argument('--load-path', default='', type=str)
 parser.add_argument('--resume-opt', action='store_true')
 parser.add_argument('-e', '--evaluate', action='store_true')
-parser.add_argument('--port', default='23446', type=str)
-# parser.add_argument('--train-root', default='/mnt/lustre/yangkunlin/furniture/data/train_all/train_v1/', type=str)
-# parser.add_argument('--train-source', default='/mnt/lustre/yangkunlin/furniture/data/train_all_list.txt', type=str)
+parser.add_argument('--port', default='23456', type=str)
 parser.add_argument('--train-root', default='/mnt/lustre/yangkunlin/furniture/data/', type=str)
 parser.add_argument('--train-source', default='/mnt/lustre/yangkunlin/furniture/data/train.txt', type=str)
 parser.add_argument('--val-root', default='/mnt/lustre/yangkunlin/furniture/data/val/', type=str)
 parser.add_argument('--val-source', default='/mnt/lustre/yangkunlin/furniture/data/valid.txt', type=str)
-parser.add_argument('--save-path', default='checkpoint7', type=str)
+parser.add_argument('--save-path', default='checkpoint', type=str)
 
 best_prec1 = 0
-min_loss = float("inf")
-NB_CLASSES = 128
 
 class ColorAugmentation(object):
     def __init__(self, eig_vec=None, eig_val=None):
@@ -70,35 +71,79 @@ class ColorAugmentation(object):
         return tensor
 
 
-class FinetunePretrainedModels(nn.Module):
-    def __init__(self, num_classes, net_cls, net_kwards):
-        super().__init__()
-        self.net = net_cls(**net_kwards)
-        self.net.classifier = nn.Linear(
-            self.net.classifier.in_features, num_classes)
+class FineTuneModel(nn.Module):
+    def __init__(self, original_model, arch, num_classes):
+        super(FineTuneModel, self).__init__()
+
+        if arch.startswith('alexnet'):
+            self.features = original_model.features
+            self.classifier = nn.Sequential(
+                nn.Dropout(),
+                nn.Linear(256 * 6 * 6, 4096),
+                nn.ReLU(inplace=True),
+                nn.Dropout(),
+                nn.Linear(4096, 4096),
+                nn.ReLU(inplace=True),
+                nn.Linear(4096, num_classes),
+            )
+            self.modelName = 'alexnet'
+        elif arch.startswith('resnet'):
+            # Everything except the last linear layer
+            self.features = nn.Sequential(*list(original_model.children())[:-1])
+            self.classifier = nn.Sequential(
+                nn.Linear(original_model.fc.in_features, num_classes)
+            )
+            self.modelName = 'resnet'
+        elif arch.startswith('vgg16'):
+            self.features = original_model.features
+            self.classifier = nn.Sequential(
+                nn.Dropout(),
+                nn.Linear(25088, 4096),
+                nn.ReLU(inplace=True),
+                nn.Dropout(),
+                nn.Linear(4096, 4096),
+                nn.ReLU(inplace=True),
+                nn.Linear(4096, num_classes),
+            )
+            self.modelName = 'vgg16'
+        elif arch.startswith('dense'):
+            self.features = nn.Sequential(*list(original_model.children())[:-1])
+
+            # Get number of features of last layer
+            num_feats = original_model.classifier.in_features
+
+            # Plug our classifier
+            self.classifier = nn.Sequential(
+                nn.Linear(num_feats, num_classes)
+            )
+            self.modelName = 'densenet'
+        else:
+            raise ("Finetuning not supported on this architecture yet")
+
+        for m in self.classifier:
+            nn.init.kaiming_normal(m.weight)
+
+        # Freeze those weights
+        # for p in self.features.parameters():
+        #     p.requires_grad = False
 
     def forward(self, x):
-        return self.net(x)
-model_dict = {
-    'dense169': partial(FinetunePretrainedModels, NB_CLASSES, densenet.densenet169)
-}
+        f = self.features(x)
+        if self.modelName == 'alexnet':
+            f = f.view(f.size(0), 256 * 6 * 6)
+        elif self.modelName == 'vgg16':
+            f = f.view(f.size(0), -1)
+        elif self.modelName == 'resnet':
+            f = f.view(f.size(0), -1)
+        elif self.modelName == 'densenet':
+            f = F.relu(f, inplace=True)
+            f = F.avg_pool2d(f, kernel_size=7).view(f.size(0), -1)
+        y = self.classifier(f)
+        return y
 
-net_kwards = [{'pretrained': 'True'}, {'pretrained': None}]
-
-def get_model(model_name: str, pretrained=True):
-    # print('[+] getting model architecture... ')
-    if(pretrained):
-        model = model_dict[model_name](net_kwards[0])
-    else:
-        model = model_dict[model_name](net_kwards[1])
-    print('[+] done.')
-    return model
-
-last_layer_names = ['module.net.last_linear.weight', 'module.net.last_linear.bias',
-                    'module.net.classifier.weight', 'module.net.classifier.bias']
 
 def main():
-    global args, best_prec1, min_loss
+    global args, best_prec1
     args = parser.parse_args()
 
     rank, world_size = dist_init(args.port)
@@ -108,14 +153,25 @@ def main():
     args.workers = args.workers // world_size
 
     # create model
-    print("=> creating model '{}'".format("dense169"))
-    print("save_path is: {}".format(args.save_path))
-    image_size = 256
-    input_size = 224
-    model = get_model('dense169', pretrained=True)
-    # print("model is: {}".format(model))
+    print("=> creating model '{}'".format(args.arch))
+    if args.arch.startswith('inception_v3'):
+        print('inception_v3 without aux_logits!')
+        image_size = 341
+        input_size = 299
+        model = models.__dict__[args.arch](pretrained=True)
+    else:
+        image_size = 256
+        input_size = 224
+        model = models.__dict__[args.arch](pretrained=True)
+    model = FineTuneModel(model, args.arch, 128)
+
     model.cuda()
     model = DistModule(model)
+
+    # define loss function (criterion) and optimizer
+    criterion = nn.CrossEntropyLoss()
+
+    optimizer = torch.optim.Adam(model.parameters(), args.lr)
 
     # optionally resume from a checkpoint
     if args.load_path:
@@ -135,8 +191,7 @@ def main():
         args.train_root,
         args.train_source,
         transforms.Compose([
-            transforms.Resize(image_size),
-            transforms.RandomCrop(input_size),
+            transforms.RandomResizedCrop(input_size),
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
             ColorAugmentation(),
@@ -148,8 +203,6 @@ def main():
         transforms.Compose([
             transforms.Resize(image_size),
             transforms.CenterCrop(input_size),
-            # transforms.Resize(input_size),
-            # transforms.CenterCrop(input_size),
             transforms.ToTensor(),
             normalize,
         ]))
@@ -165,75 +218,34 @@ def main():
         val_dataset, batch_size=args.batch_size, shuffle=False,
         num_workers=args.workers, pin_memory=False, sampler=val_sampler)
 
-    # define loss function (criterion) and optimizer
-    criterion = nn.CrossEntropyLoss()
+    if args.evaluate:
+        validate(val_loader, model, criterion)
+        return
 
-    lr = 0
-    patience = 0
     for epoch in range(args.start_epoch, args.epochs):
-        # adjust_learning_rate(optimizer, epoch)
+        adjust_learning_rate(optimizer, epoch)
         train_sampler.set_epoch(epoch)
 
-        if epoch == 1:
-            lr = 0.00003
-        if patience == 2:
-        # if epoch == 1:
-            patience = 0
-            checkpoint = load_checkpoint(args.save_path+'_best.pth.tar')
-            model.load_state_dict(checkpoint['state_dict'])
-            print("Loading checkpoint_best.............")
-            # model.load_state_dict(torch.load('checkpoint_best.pth.tar'))
-            lr = lr / 10.0
-
-        if epoch == 0:
-            lr = 0.001
-            for name, param in model.named_parameters():
-                # print("name is: {}".format(name))
-                if (name not in last_layer_names):
-                    param.requires_grad = False
-            optimizer = torch.optim.Adam(
-                filter(lambda p: p.requires_grad, model.parameters()), lr=lr)
-        else:
-            for param in model.parameters():
-                param.requires_grad = True
-            optimizer = torch.optim.Adam(
-                model.parameters(), lr=lr, weight_decay=0.0001)
-        print("lr is: {}".format(lr))
         # train for one epoch
         train(train_loader, model, criterion, optimizer, epoch)
 
         # evaluate on validation set
-        val_prec1, val_losses = validate(val_loader, model, criterion)
-        print("val_losses is: {}".format(val_losses))
+        prec1 = validate(val_loader, model, criterion)
+
         # remember best prec@1 and save checkpoint
         if rank == 0:
             # remember best prec@1 and save checkpoint
-            if val_losses < min_loss:
-                is_best = True
-                save_checkpoint({
-                    'epoch': epoch + 1,
-                    'arch': 'dense169',
-                    'state_dict': model.state_dict(),
-                    'best_prec1': best_prec1,
-                    'optimizer': optimizer.state_dict(),
-                }, is_best, args.save_path)
-                # torch.save(model.state_dict(), 'best_val_weight.pth')
-                print('val score improved from {:.5f} to {:.5f}. Saved!'.format(min_loss, val_losses))
-
-                min_loss = val_losses
-                patience = 0
-            else:
-                patience += 1
-        if rank == 1 or rank == 2 or rank == 3 or rank == 4 or rank == 5 or rank == 6 or rank == 7:
-            if val_losses < min_loss:
-                min_loss = val_losses
-                patience = 0
-            else:
-                patience += 1
-        print("patience is: {}".format(patience))
-        print("min_loss is: {}".format(min_loss))
-    print("min_loss is: {}".format(min_loss))
-
+            is_best = prec1 > best_prec1
+            if is_best == True:
+                print("epoch: {} is best now".format(epoch))
+            best_prec1 = max(prec1, best_prec1)
+            save_checkpoint({
+                'epoch': epoch + 1,
+                'arch': args.arch,
+                'state_dict': model.state_dict(),
+                'best_prec1': best_prec1,
+                'optimizer': optimizer.state_dict(),
+            }, is_best, args.save_path)
 
 
 def train(train_loader, model, criterion, optimizer, epoch):
@@ -249,7 +261,11 @@ def train(train_loader, model, criterion, optimizer, epoch):
     rank = dist.get_rank()
 
     end = time.time()
-
+    # if epoch < 100:
+    #     lr = args.lr * (args.decay_scale ** (epoch // 50))
+    # else:
+    #     lr = args.lr * (args.decay_scale ** (2+((epoch-100) // 30)))
+    # print('lr is: {}'.format(lr))
     for i, (input, target) in enumerate(train_loader):
         # measure data loading time
         data_time.update(time.time() - end)
@@ -338,10 +354,9 @@ def validate(val_loader, model, criterion):
                 i, len(val_loader), batch_time=batch_time, loss=losses, top1=top1))
 
     if rank == 0:
-        print('Prec@1 {top1.avg:.3f}\t'
-              'Loss {loss.avg:.4f}'.format(top1=top1, loss=losses))
+        print(' * Prec@1 {top1.avg:.3f}'.format(top1=top1))
 
-    return top1.avg, losses.avg
+    return top1.avg
 
 
 def save_checkpoint(state, is_best, filename):
@@ -370,10 +385,10 @@ class AverageMeter(object):
 
 def adjust_learning_rate(optimizer, epoch):
     """Sets the learning rate to the initial LR decayed by 10 every 60 epochs"""
-    if epoch < 10:
-        lr = args.lr * (args.decay_scale ** (epoch // 10))
+    if epoch < 15:
+        lr = args.lr * (args.decay_scale ** (epoch // 15))
     else:
-        lr = args.lr * (args.decay_scale ** (1 + ((epoch - 10) // 5)))
+        lr = args.lr * (args.decay_scale ** (1 + ((epoch - 15) // 8)))
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
 
@@ -393,13 +408,6 @@ def accuracy(output, target, topk=(1,)):
         res.append(correct_k.mul_(100.0 / batch_size))
     return res[0]
 
-def load_checkpoint(fpath):
-    if osp.isfile(fpath):
-        checkpoint = torch.load(fpath)
-        print("=> Loaded checkpoint '{}'".format(fpath))
-        return checkpoint
-    else:
-        raise ValueError("=> No checkpoint found at '{}'".format(fpath))
 
 def load_state(load_path, model, optimizer=None):
     if os.path.isfile(load_path):
