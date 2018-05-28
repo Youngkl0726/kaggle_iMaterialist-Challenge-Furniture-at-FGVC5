@@ -4,8 +4,11 @@ import csv
 model_list = ['res152_ck5.npy', 'inceptionResnetv2_ck1.npy', 'dpn98_ck1.npy', \
               'senet154_ck2.npy', 'dpn131_ck1.npy', 'inceptionResnetv2_ck2.npy', \
               'res152_ck7.npy', 'nasnet_ck1.npy', 'dpn98_ck2.npy', \
-              'inceptionv4_ck1.npy', 'dpn92_ck1.npy', 'resnet152_ck8.npy']
+              'inceptionv4_ck1.npy', 'dpn92_ck1.npy', 'dpn107_ck1.npy', \
+              'resnext101_32x4d_ck1.npy', 'resnext101_64x4d_ck1.npy', 'se_resnet152_ck1.npy',\
+              'inceptionv4_ck2.npy']
 
+# model_list = ['resnet152_ck8.npy', 'dpn131_ck2.npy', 'dpn98_ck3.npy']
 length = len(model_list)
 # average
 npy = []
@@ -99,3 +102,13 @@ csvfile.close()
 #               'senet154_ck2.npy', 'dpn131_ck1.npy', 'inceptionResnetv2_ck2.npy', \
 #               'res152_ck7.npy', 'nasnet_ck1.npy', 'dpn98_ck2.npy', \
 #               'inceptionv4_ck1.npy', 'dpn92_ck1.npy', 'resnet152_ck8.npy']
+# ensemble pse1
+# model_list = ['resnet152_ck8.npy', 'dpn131_ck2.npy', 'dpn98_ck3.npy']
+
+# ensemble4
+# model_list = ['res152_ck5.npy', 'inceptionResnetv2_ck1.npy', 'dpn98_ck1.npy', \
+#               'senet154_ck2.npy', 'dpn131_ck1.npy', 'inceptionResnetv2_ck2.npy', \
+#               'res152_ck7.npy', 'nasnet_ck1.npy', 'dpn98_ck2.npy', \
+#               'inceptionv4_ck1.npy', 'dpn92_ck1.npy', 'dpn107_ck1.npy', \
+#               'resnext101_32x4d_ck1.npy', 'resnext101_64x4d_ck1.npy', 'se_resnet152_ck1.npy',\
+#               'inceptionv4_ck2.npy']
