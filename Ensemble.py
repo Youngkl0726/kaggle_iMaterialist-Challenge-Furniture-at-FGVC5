@@ -1,13 +1,18 @@
 import numpy as np
 import csv
 
-model_list = ['res152_ck5.npy', 'inceptionResnetv2_ck1.npy', 'dpn98_ck1.npy', \
-              'senet154_ck2.npy', 'dpn131_ck1.npy', 'inceptionResnetv2_ck2.npy', \
-              'res152_ck7.npy', 'nasnet_ck1.npy', 'dpn98_ck2.npy', \
-              'inceptionv4_ck1.npy', 'dpn92_ck1.npy', 'dpn107_ck1.npy', \
-              'resnext101_32x4d_ck1.npy', 'resnext101_64x4d_ck1.npy', 'se_resnet152_ck1.npy',\
-              'inceptionv4_ck2.npy']
+# model_list = ['res152_ck5.npy', 'inceptionResnetv2_ck1.npy', 'dpn98_ck1.npy', \
+#               'senet154_ck2.npy', 'dpn131_ck1.npy', 'inceptionResnetv2_ck2.npy', \
+#               'res152_ck7.npy', 'nasnet_ck1.npy', 'dpn98_ck2.npy', \
+#               'inceptionv4_ck1.npy', 'dpn92_ck1.npy', 'dpn107_ck1.npy', \
+#               'resnext101_32x4d_ck1.npy', 'resnext101_64x4d_ck1.npy', 'se_resnet152_ck1.npy',\
+#               'inceptionv4_ck2.npy']
+# model_list = ['resnet152_ck8.npy', 'dpn131_ck2.npy', 'dpn98_ck3.npy',\
+#               'dpn92_ck3.npy', 'inceptionresnetv2_ck3.npy',\
+#               'inceptionv4_ck3.npy', 'senet154_ck3.npy', 'resnext101_32x4d_ck2.npy',\
+#               'resnext101_64x4d_ck2.npy', 'se_resnet152_ck2.npy']
 
+model_list = ['resnext101_32x4d_ck2.npy', 'dpn131_ck2.npy']
 # model_list = ['resnet152_ck8.npy', 'dpn131_ck2.npy', 'dpn98_ck3.npy']
 length = len(model_list)
 # average
@@ -15,7 +20,7 @@ npy = []
 for i in xrange(0, length):
     model_name = model_list[i]
     print("model name is: {}".format(model_name))
-    npy_file = '/Users/youngkl/Desktop/fur_res/'+model_name
+    npy_file = '/Users/youngkl/Desktop/fur_pse/'+model_name
     npy.append(np.load(npy_file))
 # print npy[0][0], npy[1][0], npy[2][0]
 npy_res = npy[0]
@@ -69,7 +74,7 @@ for i in xrange(12800):
         add.append(id)
 print add
 
-csvfile = open("result.csv", "w")
+csvfile = open("ensemble.csv", "w")
 fileheader = ["id", "predicted"]
 writer = csv.writer(csvfile)
 writer.writerow(fileheader)
@@ -112,3 +117,15 @@ csvfile.close()
 #               'inceptionv4_ck1.npy', 'dpn92_ck1.npy', 'dpn107_ck1.npy', \
 #               'resnext101_32x4d_ck1.npy', 'resnext101_64x4d_ck1.npy', 'se_resnet152_ck1.npy',\
 #               'inceptionv4_ck2.npy']
+# ensemble5pse
+# model_list = ['resnet152_ck8.npy', 'dpn131_ck2.npy', 'dpn98_ck3.npy',\
+#               'dpn92_ck3.npy', 'dpn107_ck2.npy', 'inceptionresnetv2_ck3.npy',\
+#               'inceptionv4_ck3.npy', 'senet154_ck3.npy', 'resnext101_32x4d_ck2.npy',\
+#               'resnext101_64x4d_ck2.npy', 'se_resnet152_ck2.npy', 'xception_ck2.npy']
+# ensemble6pse
+# model_list = ['resnet152_ck8.npy', 'dpn131_ck2.npy', 'dpn98_ck3.npy',\
+#               'dpn92_ck3.npy', 'inceptionresnetv2_ck3.npy',\
+#               'inceptionv4_ck3.npy', 'senet154_ck3.npy', 'resnext101_32x4d_ck2.npy',\
+#               'resnext101_64x4d_ck2.npy', 'se_resnet152_ck2.npy']
+# ensemble7pse
+# model_list = ['resnext101_32x4d_ck2.npy', 'dpn131_ck2.npy']

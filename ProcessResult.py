@@ -2,7 +2,7 @@ import numpy as np
 import csv
 
 txt_file = open('result.txt', 'wb')
-npy_name = 'dpn107_ck2.npy'
+npy_name = 'inceptionv4_ck4.npy'
 print npy_name
 npy = np.load(npy_name)
 # print npy[0],npy[1]
@@ -111,7 +111,7 @@ print add
 # print same
 # print fname
 
-csvfile = open("result_dpn107_ck2.csv", "w")
+csvfile = open("result_inceptionv4_ck4.csv", "w")
 fileheader = ["id", "predicted"]
 writer = csv.writer(csvfile)
 writer.writerow(fileheader)
