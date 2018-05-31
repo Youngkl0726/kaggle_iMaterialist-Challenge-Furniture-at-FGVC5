@@ -2,7 +2,7 @@ import numpy as np
 import csv
 
 txt_file = open('result.txt', 'wb')
-npy_name = 'inceptionv4_ck4.npy'
+npy_name = 'dpn98_ck6.npy'
 print npy_name
 npy = np.load(npy_name)
 # print npy[0],npy[1]
@@ -111,7 +111,7 @@ print add
 # print same
 # print fname
 
-csvfile = open("result_inceptionv4_ck4.csv", "w")
+csvfile = open("result_dpn98_ck6.csv", "w")
 fileheader = ["id", "predicted"]
 writer = csv.writer(csvfile)
 writer.writerow(fileheader)
@@ -129,3 +129,14 @@ for i in xrange(12800):
         context.append("2")
     writer.writerow(context)
 csvfile.close()
+#
+# for i in xrange(12704):
+#     context = []
+#     if i < 12704:
+#         line = res_file.readline()
+#         line = line.strip()
+#         line = line.split(" ")
+#         context.append(fname[i])
+#         context.append(int(line[0])+1)
+#     writer.writerow(context)
+# csvfile.close()

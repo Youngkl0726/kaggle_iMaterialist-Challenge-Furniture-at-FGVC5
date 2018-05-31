@@ -12,8 +12,15 @@ import csv
 #               'inceptionv4_ck3.npy', 'senet154_ck3.npy', 'resnext101_32x4d_ck2.npy',\
 #               'resnext101_64x4d_ck2.npy', 'se_resnet152_ck2.npy']
 
-model_list = ['resnext101_32x4d_ck2.npy', 'dpn131_ck2.npy']
-# model_list = ['resnet152_ck8.npy', 'dpn131_ck2.npy', 'dpn98_ck3.npy']
+model_list = ['resnext101_32x4d_ck2.npy', 'dpn131_ck2.npy', 'dpn107_ck4.npy', \
+              'resnext101_32x4d_ck4.npy', 'dpn92_ck6.npy', 'dpn98_ck6.npy',\
+              'dpn92_ck3.npy', 'dpn98_ck3.npy', 'dpn107_ck2.npy',\
+              'inceptionresnetv2_ck3.npy', 'inceptionv4_ck3.npy',
+              'resnet152_ck8.npy', 'senet154_ck3.npy', 'resnext101_64x4d_ck2.npy',\
+              'se_resnet152_ck2.npy', 'dpn92_ck5.npy', 'dpn131_ck5.npy',\
+              'resnet152_ck10.npy', 'se_resnet152_ck4.npy', 'senet154_ck5.npy',\
+              'resnet152_ck11.npy', 'resnext101_32x4d_ck5.npy', 'dpn131_ck6.npy'] # best ensemble
+
 length = len(model_list)
 # average
 npy = []
@@ -56,7 +63,6 @@ def get_all(filename):
     for i in xrange(12800):
         line = file.readline()
         line = line.strip()
-        # print line
         res_line.append(line)
     return res_line
 
@@ -129,3 +135,25 @@ csvfile.close()
 #               'resnext101_64x4d_ck2.npy', 'se_resnet152_ck2.npy']
 # ensemble7pse
 # model_list = ['resnext101_32x4d_ck2.npy', 'dpn131_ck2.npy']
+# ensemble8pse
+# model_list = model_list = ['resnext101_32x4d_ck2.npy', 'dpn131_ck2.npy', 'dpn107_ck4.npy', \
+#               'resnext101_32x4d_ck4.npy']
+#
+# ensemble9
+# model_list = ['resnext101_32x4d_ck2.npy', 'dpn131_ck2.npy', 'dpn107_ck4.npy', \
+#               'resnext101_32x4d_ck4.npy', 'dpn92_ck6.npy', 'dpn98_ck6.npy',\
+#               'dpn92_ck3.npy', 'dpn98_ck3.npy', 'dpn107_ck2.npy',\
+#               'inceptionresnetv2_ck3.npy', 'inceptionv4_ck3.npy', \
+#               'resnet152_ck8.npy', 'senet154_ck3.npy', 'resnext101_64x4d_ck2.npy',\
+#               'se_resnet152_ck2.npy', 'dpn92_ck5.npy', 'dpn131_ck5.npy',\
+#               'resnet152_ck10.npy', 'se_resnet152_ck4.npy', 'senet154_ck5.npy',\
+#               'resnet152_ck11.npy', 'resnext101_32x4d_ck5.npy', 'dpn131_ck6.npy']
+# ensemble10
+# model_list = ['resnext101_32x4d_ck2.npy', 'dpn131_ck2.npy', 'dpn107_ck4.npy', \
+#               'resnext101_32x4d_ck4.npy', 'dpn92_ck6.npy', 'dpn98_ck6.npy',\
+#               'dpn92_ck3.npy', 'dpn98_ck3.npy', 'dpn107_ck2.npy',\
+#               'inceptionresnetv2_ck3.npy', 'inceptionv4_ck3.npy', 'dpn107_ck5.npy',\
+#               'resnet152_ck8.npy', 'senet154_ck3.npy', 'resnext101_64x4d_ck2.npy',\
+#               'se_resnet152_ck2.npy', 'dpn92_ck5.npy', 'dpn131_ck5.npy',\
+#               'resnet152_ck10.npy', 'se_resnet152_ck4.npy', 'senet154_ck5.npy',\
+#               'resnet152_ck11.npy', 'resnext101_32x4d_ck5.npy', 'dpn131_ck6.npy']
